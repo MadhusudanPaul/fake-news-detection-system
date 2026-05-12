@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<!--
+  index.html — TrueWire Fake News Detector
+  Flask looks for HTML files inside the templates/ folder.
+  JavaScript sends article text to /analyze and fills the page
+  with the prediction results returned by Flask.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrueWire — Fake News Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+</head>
+<body>
+<div class="page">
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="logo">
+      <div class="logo-icon"><i class="ti ti-shield-check" aria-hidden="true"></i></div>
+      <span class="logo-name">TrueWire<span class="logo-dot">.</span></span>
+    </div>
+    <span class="tagline">Informed Trust · Objective Clarity</span>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>Informed Trust through Objective Clarity</h1>
+    <p>Paste a news article below — we'll tell you if it's real or fake</p>
+  </div>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="input-label">
+      <i class="ti ti-file-text" aria-hidden="true"></i> Paste article
+    </div>
+    <div class="paste-wrap">
+      <textarea
+        id="article-text"
+        placeholder="Paste the full news article here…&#10;&#10;The more text you provide, the more accurate the result will be."
+        aria-label="News article text"
+      ></textarea>
+      <div class="paste-bar">
+        <span id="char-count">0 characters · 0 words</span>
+        <button class="btn-clear-text" onclick="clearTextarea()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Error message box -->
+    <div class="error-msg" id="error-msg"></div>
+
+    <!-- Analyze button — inline style forces #1A365D regardless of browser defaults -->
+    <button
+      id="analyze-btn"
+      class="btn-analyze"
+      onclick="analyzeArticle()"
+      style="background-color:#1A365D !important; color:#ffffff !important;"
+    >
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <span>Analyze article</span>
+    </button>
+  </div>
+
+  <!-- Loading spinner -->
+  <div class="loading-msg" id="loading-msg">
+    <div class="spinner"></div>
+    Analyzing article...
+  </div>
+
+  <!-- Result section (hidden until Flask responds) -->
+  <div class="result-section" id="result-section">
+
+    <!-- Verdict card -->
+    <div class="verdict-card" id="verdict-card">
+      <div class="verdict-top">
+        <span class="verdict-label">Analysis result</span>
+        <span class="verdict-badge" id="verdict-badge">—</span>
+      </div>
+      <div class="verdict-main">
+        <span class="verdict-pct" id="verdict-pct">—</span>
+        <span class="verdict-desc" id="verdict-desc">—</span>
+      </div>
+      <div class="bar-labels">
+        <span>Fake — <span id="fake-lbl">—</span></span>
+        <span>Real — <span id="real-lbl">—</span></span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fake" id="bar-fake" style="width:0%;"></div>
+        <div class="bar-real" id="bar-real" style="width:0%;"></div>
+      </div>
+      <div class="meta-row">
+        <span class="meta-chip">
+          <i class="ti ti-clock" aria-hidden="true"></i>
+          <span id="elapsed-time">—</span>
+        </span>
+        <span class="meta-chip">
+          <i class="ti ti-file-text" aria-hidden="true"></i>
+          <span id="word-count-display">—</span>
+        </span>
+        <span class="meta-chip">
+          <i class="ti ti-cpu" aria-hidden="true"></i> Logistic Regression
+        </span>
+      </div>
+    </div>
+
+    <!-- Detail grid -->
+    <div class="detail-grid">
+
+      <!-- Verified Facts -->
+      <div class="detail-card">
+        <div class="detail-title">
+          <i class="ti ti-circle-check" aria-hidden="true" style="color:#276749;"></i>
+          Verified facts
+        </div>
+        <div class="detail-item" id="fact-date">
+          <div class="dot dot-neu"><i class="ti ti-minus" aria-hidden="true" style="font-size:9px;color:#718096;"></i></div>
+          <span>Publication date</span>
+        </div>
+        <div class="detail-item" id="fact-author">
+          <div class="dot dot-neu"><i class="ti ti-minus" aria-hidden="true" style="font-size:9px;color:#718096;"></i></div>
+          <span>Author name</span>
+        </div>
+        <div class="detail-item" id="fact-sources">
+          <div class="dot dot-neu"><i class="ti ti-minus" aria-hidden="true" style="font-size:9px;color:#718096;"></i></div>
+          <span>Sources cited</span>
+        </div>
+        <div class="detail-item" id="fact-emotional">
+          <div class="dot dot-neu"><i class="ti ti-minus" aria-hidden="true" style="font-size:9px;color:#718096;"></i></div>
+          <span>No emotional language</span>
+        </div>
+        <div class="detail-item" id="fact-headline">
+          <div class="dot dot-neu"><i class="ti ti-minus" aria-hidden="true" style="font-size:9px;color:#718096;"></i></div>
+          <span>Headline matches body</span>
+        </div>
+      </div>
+
+      <!-- Source Reliability -->
+      <div class="detail-card">
+        <div class="detail-title">
+          <i class="ti ti-shield" aria-hidden="true" style="color:#1A365D;"></i>
+          Source reliability
+        </div>
+        <div class="src-row">
+          <span class="src-name">Factual language</span>
+          <div class="src-track"><div class="src-fill" id="src-factual" style="width:0%;"></div></div>
+          <span class="src-val" id="src-factual-val">—</span>
+        </div>
+        <div class="src-row">
+          <span class="src-name">Neutral tone</span>
+          <div class="src-track"><div class="src-fill" id="src-neutral" style="width:0%;"></div></div>
+          <span class="src-val" id="src-neutral-val">—</span>
+        </div>
+        <div class="src-row">
+          <span class="src-name">Citation quality</span>
+          <div class="src-track"><div class="src-fill" id="src-citation" style="width:0%;"></div></div>
+          <span class="src-val" id="src-citation-val">—</span>
+        </div>
+        <div class="src-row">
+          <span class="src-name">Writing consistency</span>
+          <div class="src-track"><div class="src-fill" id="src-writing" style="width:0%;"></div></div>
+          <span class="src-val" id="src-writing-val">—</span>
+        </div>
+        <div class="src-row">
+          <span class="src-name">Overall reliability</span>
+          <div class="src-track"><div class="src-fill src-fill-brown" id="src-overall" style="width:0%;"></div></div>
+          <span class="src-val src-val-brown" id="src-overall-val">—</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- end result-section -->
+
+  <!-- Why Trust TrueWire -->
+  <div class="trust-heading">
+    <i class="ti ti-rosette" aria-hidden="true"></i> Why trust TrueWire?
+  </div>
+  <div class="trust-grid">
+    <div class="trust-card">
+      <div class="trust-icon"><i class="ti ti-target" aria-hidden="true" style="color:#1A365D;"></i></div>
+      <div class="trust-title">High accuracy</div>
+      <div class="trust-stat">94.6%</div>
+      <div class="trust-stat-label">on test dataset</div>
+      <div class="trust-desc">Trained on thousands of labeled real and fake articles.</div>
+    </div>
+    <div class="trust-card">
+      <div class="trust-icon"><i class="ti ti-bolt" aria-hidden="true" style="color:#4F2E00;"></i></div>
+      <div class="trust-title">Instant results</div>
+      <div class="trust-stat">~0.3s</div>
+      <div class="trust-stat-label">avg. analysis time</div>
+      <div class="trust-desc">No waiting, no sign-up needed.</div>
+    </div>
+    <div class="trust-card">
+      <div class="trust-icon"><i class="ti ti-scale" aria-hidden="true" style="color:#1A365D;"></i></div>
+      <div class="trust-title">Objectivity</div>
+      <div class="trust-desc" style="margin-top:4px;">No human bias — evaluates only language and structure, not topic or political view.</div>
+    </div>
+  </div>
+
+  <!-- How it works toggle -->
+  <div style="margin-top:1rem;">
+    <button class="toggle-btn" id="how-toggle" onclick="toggleHow()">
+      <span>
+        <i class="ti ti-help-circle" aria-hidden="true"
+           style="font-size:15px;vertical-align:-2px;margin-right:6px;color:#718096;"></i>
+        How does TrueWire work?
+      </span>
+      <i class="ti ti-chevron-down toggle-icon" id="toggle-icon" aria-hidden="true"></i>
+    </button>
+    <div class="how-body" id="how-body">
+      <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Paste the article</strong> — the text is sent to the Flask backend for processing.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><strong>TF-IDF vectorization</strong> — words are converted into numerical features based on frequency and importance.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Logistic Regression</strong> — a model trained on thousands of labeled articles predicts the probability of the article being fake.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Source analysis</strong> — writing style, tone, and citation patterns are checked against reliability signals.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-text"><strong>Result</strong> — confidence percentage, dual-class breakdown, source reliability scores, and verified fact checks.</div></div>
+    </div>
+  </div>
+
+  <div class="footer">TrueWire · Informed Trust through Objective Clarity</div>
+
+</div>
+
+<script>
+  // Live character + word counter
+  document.getElementById('article-text').addEventListener('input', function () {
+    const chars = this.value.length;
+    const words = this.value.trim() ? this.value.trim().split(/\s+/).length : 0;
+    document.getElementById('char-count').textContent = chars + ' characters · ' + words + ' words';
+  });
+
+  // Clear textarea
+  function clearTextarea() {
+    document.getElementById('article-text').value = '';
+    document.getElementById('char-count').textContent = '0 characters · 0 words';
+    document.getElementById('error-msg').style.display = 'none';
+    document.getElementById('result-section').style.display = 'none';
+  }
+
+  // Main analyze function — sends text to Flask, displays results
+  async function analyzeArticle() {
+    const text = document.getElementById('article-text').value.trim();
+    const errorBox = document.getElementById('error-msg');
+
+    // Validate
+    if (!text) { showError('Please paste a news article before analyzing.'); return; }
+    if (text.split(/\s+/).length < 10) {
+      showError('Article is too short. Please paste more text for an accurate result.'); return;
+    }
+
+    // Show loading
+    errorBox.style.display = 'none';
+    document.getElementById('result-section').style.display = 'none';
+    document.getElementById('loading-msg').style.display = 'block';
+    document.getElementById('analyze-btn').disabled = true;
+
+    try {
+      // POST request to Flask /analyze route
+      const response = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      });
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        showError(data.error || 'Something went wrong. Please try again.'); return;
+      }
+
+      displayResults(data);
+
+    } catch (err) {
+      showError('Could not connect to the server. Is app.py running?');
+    } finally {
+      document.getElementById('loading-msg').style.display = 'none';
+      document.getElementById('analyze-btn').disabled = false;
+    }
+  }
+
+  // Fill the result section with data from Flask
+  function displayResults(data) {
+    const isFake = data.prediction === 'Fake';
+
+    // Verdict card styling
+    document.getElementById('verdict-card').className =
+      'verdict-card ' + (isFake ? 'verdict-fake' : 'verdict-real');
+
+    // Badge
+    const badge = document.getElementById('verdict-badge');
+    badge.textContent = isFake ? 'Likely Fake' : 'Likely Real';
+    badge.className   = 'verdict-badge ' + (isFake ? 'badge-fake' : 'badge-real');
+
+    // Big percentage
+    const pct = isFake ? data.fake_percent : data.real_percent;
+    const pctEl = document.getElementById('verdict-pct');
+    pctEl.textContent = pct + '%';
+    pctEl.className   = 'verdict-pct ' + (isFake ? 'pct-fake' : 'pct-real');
+
+    // Description
+    document.getElementById('verdict-desc').innerHTML = isFake
+      ? 'probability this article<br>contains false information'
+      : 'probability this article<br>is genuine news';
+
+    // Dual bar
+    document.getElementById('bar-fake').style.width = data.fake_percent + '%';
+    document.getElementById('bar-real').style.width = data.real_percent + '%';
+    document.getElementById('fake-lbl').textContent = data.fake_percent + '%';
+    document.getElementById('real-lbl').textContent = data.real_percent + '%';
+
+    // Meta chips
+    document.getElementById('elapsed-time').textContent      = data.elapsed_time + 's';
+    document.getElementById('word-count-display').textContent = data.word_count + ' words';
+
+    // Verified facts
+    const vf = data.verified_facts;
+    setFactRow('fact-date',      vf.has_date,              'Publication date');
+    setFactRow('fact-author',    vf.has_author,             'Author name');
+    setFactRow('fact-sources',   vf.has_sources,            'Sources cited');
+    setFactRow('fact-emotional', !vf.emotional_language,    'No emotional language');
+    setFactRow('fact-headline',  vf.headline_matches_body,  'Headline matches body');
+
+    // Reliability bars
+    const rs = data.reliability_scores;
+    setBar('src-factual',  rs.factual_language,    'src-factual-val');
+    setBar('src-neutral',  rs.neutral_tone,         'src-neutral-val');
+    setBar('src-citation', rs.citation_quality,     'src-citation-val');
+    setBar('src-writing',  rs.writing_consistency,  'src-writing-val');
+    setBar('src-overall',  rs.overall_reliability,  'src-overall-val');
+
+    colorBar('src-factual',  rs.factual_language);
+    colorBar('src-neutral',  rs.neutral_tone);
+    colorBar('src-citation', rs.citation_quality);
+    colorBar('src-writing',  rs.writing_consistency);
+    document.getElementById('src-overall').className = 'src-fill src-fill-brown';
+
+    // Show result section
+    const section = document.getElementById('result-section');
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // Helper: set a fact row icon (pass = green check, fail = red X)
+  function setFactRow(rowId, pass, label) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.innerHTML = `
+      <div class="dot ${pass ? 'dot-check' : 'dot-warn'}">
+        <i class="ti ${pass ? 'ti-check' : 'ti-x'}" aria-hidden="true"
+           style="font-size:9px;color:${pass ? '#276749' : '#C53030'};"></i>
+      </div>
+      <span>${label}</span>`;
+  }
+
+  // Helper: set reliability bar width + value text
+  function setBar(barId, value, valId) {
+    document.getElementById(barId).style.width   = value + '%';
+    document.getElementById(valId).textContent = value + '%';
+  }
+
+  // Helper: color bar red if score < 40, blue otherwise
+  function colorBar(barId, value) {
+    document.getElementById(barId).className =
+      'src-fill ' + (value < 40 ? 'src-fill-low' : 'src-fill-mid');
+  }
+
+  // Helper: show error message
+  function showError(msg) {
+    const box = document.getElementById('error-msg');
+    box.textContent = msg;
+    box.style.display = 'block';
+    document.getElementById('loading-msg').style.display = 'none';
+  }
+
+  // How it works accordion toggle
+  function toggleHow() {
+    const body = document.getElementById('how-body');
+    const icon = document.getElementById('toggle-icon');
+    const btn  = document.getElementById('how-toggle');
+    const open = body.classList.contains('open');
+    body.classList.toggle('open', !open);
+    icon.classList.toggle('open', !open);
+    btn.classList.toggle('open',  !open);
+  }
+</script>
+</body>
+</html>

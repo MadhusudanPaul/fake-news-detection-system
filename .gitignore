@@ -1,0 +1,6 @@
+dataset/Fake.csv
+dataset/True.csv
+model/model.pkl
+model/vectorizer.pkl
+__pycache__/
+*.pyc
